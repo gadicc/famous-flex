@@ -484,6 +484,9 @@ define(function(require, exports, module) {
             }
 
             // Insert renderable
+            if (this._nodesById[indexOrId] === renderable) {
+                return;
+            }
             this._nodesById[indexOrId] = renderable;
         }
 
@@ -592,6 +595,20 @@ define(function(require, exports, module) {
     }
 
     /**
+     * Get the renderable at the given index or Id.
+     *
+     * @param {Number|String} indexOrId Index within dataSource array or id (String)
+     * @return {Renderable} renderable or `undefined`
+     */
+    LayoutController.prototype.get = function(indexOrId) {
+      if (this._nodesById || (indexOrId instanceof String) || (typeof indexOrId === 'string')) {
+        return this._nodesById[indexOrId];
+      }
+      var viewSequence = _getViewSequenceAtIndex.call(this, indexOrId);
+      return viewSequence ? viewSequence.get() : undefined;
+    };
+
+    /**
      * Swaps two renderables at the given positions.
      *
      * @param {Number} index Index of the renderable to swap
@@ -604,6 +621,27 @@ define(function(require, exports, module) {
             this._isDirty = true;
         }
         return this;
+    };
+
+    /**
+     * Swaps two renderables at the given positions.
+     *
+     * @param {Number|String} indexOrId Index within dataSource array or id (String)
+     * @param {Renderable} renderable renderable to replace with
+     * @return {Renderable} replaced renderable
+     */
+    LayoutController.prototype.replace = function(indexOrId, renderable) {
+        var oldRenderable;
+        if (this._nodesById || (indexOrId instanceof String) || (typeof indexOrId === 'string')) {
+            oldRenderable = this._nodesById[indexOrId];
+            this._nodesById[indexOrId] = renderable;
+            this._isDirty = true;
+            return oldRenderable;
+        }
+        //var viewSequence = _getViewSequenceAtIndex.call(this, indexOrId);
+        //return viewSequence ? viewSequence.get() : undefined;
+        // TODO - support indexes
+        return undefined;
     };
 
     /**
@@ -656,9 +694,13 @@ define(function(require, exports, module) {
     /**
      * Removes all renderables from the data-source.
      *
+     * The optional argument `removeSpec` is only used `flow` mode is enabled.
+     * When specified, the renderables ares removed using an animation ending at
+     * the size, origin, opacity, transform, etc... as specified in `removeSpec'.
+     *
      * @return {LayoutController} this
      */
-    LayoutController.prototype.removeAll = function() {
+    LayoutController.prototype.removeAll = function(removeSpec) {
         if (this._nodesById) {
             var dirty = false;
             for (var key in this._nodesById) {
@@ -670,7 +712,14 @@ define(function(require, exports, module) {
             }
         }
         else if (this._dataSource){
-          this.setDataSource([]);
+            this.setDataSource([]);
+        }
+        if (removeSpec) {
+            var node = this._nodes.getStartEnumNode();
+            while (node) {
+                node.remove(removeSpec || this.options.removeSpec);
+                node = node._next;
+            }
         }
         return this;
     };
@@ -767,6 +816,11 @@ define(function(require, exports, module) {
                     this._layout.options    // additional layout-options
                 );
             }
+
+            // Mark non-invalidated nodes for removal
+            this._nodes.removeNonInvalidatedNodes(this.options.removeSpec);
+
+            // Cleanup any nodes in case of a VirtualViewSequence
             this._nodes.removeVirtualViewSequenceNodes();
 
             // Calculate scroll-length and use that as the true-size (height)
